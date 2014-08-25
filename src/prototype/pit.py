@@ -13,15 +13,15 @@ class PIT():
         # Return items in the table with the same digest
         syncs = []
         for message in self.table:
-            if message._meta._name == u'sync' and message.payload.digest == digest:
+            if message.meta.name == u'sync' and message.payload.digest == digest:
                 syncs.append(message)
         return syncs
 
-    def get_interest(self, producer, seq)
+    def get_interest(self, producer, seq):
         # Return items in the table with the same sequence number
         interests = []
         for message in self.table:
-            if message._meta._name == 'interest' and message.payload.producer == producer \
+            if message.meta.name == 'interest' and message.payload.producer == producer \
                     and message.payload.seq_number == seq:
                 interests.append(message)
         return interests
@@ -37,7 +37,7 @@ class PIT():
     def add(self, message):
         self.table.append(message)
 
-    def remove(self, items)
+    def remove(self, items):
         for item in items:
             self.table.remove(item)
 

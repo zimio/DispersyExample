@@ -32,7 +32,7 @@ logger.setLevel(logging.DEBUG)
 
 from dispersy.dispersy import Dispersy
 from dispersy.endpoint import StandaloneEndpoint
-from example.community import ExampleCommunity
+from prototype.community import ExampleCommunity
 
 
 class DispersyExample(Dispersy):
@@ -112,3 +112,4 @@ if __name__ == "__main__":
     # Port, Data directory, and message(string) to inject into the community
     DispersyExample(int(sys.argv[1]), sys.argv[2], sys.argv[3])
     exit(reactor.exitCode)
+
