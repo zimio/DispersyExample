@@ -6,15 +6,16 @@ class DigestTree:
         # Dictionary of producer names and their sequences
         self.children = {}
         self.last_digest = None
-        self.add_branch(our_name)
+        #self.add_branch(our_name)
 
     def calculate_root(self):
         keys = list(self.children)
         keys.sort()
         sha1 = hashlib.sha1()
-        for key in keys:
-            sha1.update(key + str(self.children[key]))
-        self.last_digest = sha1.digest()
+        if len(keys) > 1:
+            for key in keys:
+                sha1.update(key + str(self.children[key]))
+        self.last_digest = sha1.hexdigest()
         return self.last_digest
 
     def add_branch(self, prod_name, seq=0):
