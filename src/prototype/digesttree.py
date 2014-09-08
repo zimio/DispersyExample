@@ -33,7 +33,7 @@ class DigestTree:
 
     def update_seq(self, prod_name, seq):
         old_val = self.children[prod_name]
-        if old >= seq:
+        if old_val >= seq:
             raise OutOfOrderSequence
         else:
             self.children[prod_name] = seq
