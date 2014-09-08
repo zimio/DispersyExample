@@ -3,13 +3,14 @@ import logging
 from .conversion import Conversion
 from .payload import SyncPayload, DataPayload, InterestPayload
 from .digesttree import DigestTree
+from .digestlog import DigestLog
 from .pit import PIT
 
 from dispersy.authentication import MemberAuthentication
 from dispersy.community import Community
 from dispersy.conversion import DefaultConversion
-from dispersy.destination import CommunityDestination
-from dispersy.distribution import FullSyncDistribution
+from dispersy.destination import CommunityDestination, CandidateDestination
+from dispersy.distribution import FullSyncDistribution, LastSyncDistribution, DirectDistribution
 from dispersy.message import BatchConfiguration, Message, DelayMessageByProof
 from dispersy.resolution import PublicResolution
 
@@ -29,9 +30,10 @@ class ExampleCommunity(Community):
         super(ExampleCommunity, self).initialize()
         logging.info("ExampleCommunity Initalized")
         self.digesttree = DigestTree(self.my_member.mid)
+        self.digestlog = DigestLog()
         self.pit = PIT()
         #self.send_data(msg)
-        self.register_task("send_data",
+        self.register_task("send_new_data",
                            LoopingCall(self.send_data_console)).start(50 , now=True)
 
 
@@ -46,7 +48,7 @@ class ExampleCommunity(Community):
             Message(self, u"sync",
                     MemberAuthentication(encoding="sha1"),
                     PublicResolution(),
-                    FullSyncDistribution(enable_sequence_number=False, synchronization_direction=u"ASC", priority=128),
+                    LastSyncDistribution(synchronization_direction=u"ASC", priority=128, history_size=50),
                     CommunityDestination(node_count=10),
                     SyncPayload(),
                     self.check_sync,
@@ -55,27 +57,37 @@ class ExampleCommunity(Community):
             Message(self, u"interest",
                     MemberAuthentication(encoding="sha1"),
                     PublicResolution(),
-                    FullSyncDistribution(enable_sequence_number=False, synchronization_direction=u"ASC", priority=128),
+                    DirectDistribution(),
                     CommunityDestination(node_count=10),
                     InterestPayload(),
                     self.check_interest,
                     self.on_interest,
                     batch=BatchConfiguration(max_window=3.0)),
-            Message(self, u"data",
+            Message(self, u"newdata",
                     MemberAuthentication(encoding="sha1"),
                     PublicResolution(),
-                    FullSyncDistribution(enable_sequence_number=False, synchronization_direction=u"ASC", priority=128),
+                    LastSyncDistribution(synchronization_direction=u"ASC", priority=128, history_size=50),
                     CommunityDestination(node_count=10),
                     DataPayload(),
                     self.check_data,
                     self.on_data,
                     batch=BatchConfiguration(max_window=3.0)),
+            Message(self, u"data",
+                    MemberAuthentication(encoding="sha1"),
+                    PublicResolution(),
+                    DirectDistribution(),
+                    CandidateDestination(),
+                    DataPayload(),
+                    self.check_data,
+                    self.on_data,
+                    batch=BatchConfiguration(max_window=3.0)),
+
 
         ]
 
     def send_data_console(self):
         msg = raw_input("You: ")
-        self.send_data(msg)
+        self.send_new_data(msg)
 
     def initiate_conversions(self):
         return [DefaultConversion(self), Conversion(self)]
@@ -125,11 +137,19 @@ class ExampleCommunity(Community):
                 continue
             print 'Stranger: ', message.payload.text
 
-    def send_data(self, text='testing'):
+    def send_new_data(self, text='testing'):
+        meta = self.get_meta_message(u"newdata")
+        seq = self.digesttree.increase_our_seq()
+        self.digestlog.add(self.my_member.mid, seq, text)
+        message = meta.impl(authentication=(self.my_member,),
+                          distribution=(self.claim_global_time(),),
+                          payload=(unicode(text), seq))
+        self.dispersy.store_update_forward([message], True, True, True)
+
+    def send_data(self, text, sequence, candidate):
         meta = self.get_meta_message(u"data")
         message = meta.impl(authentication=(self.my_member,),
                           distribution=(self.claim_global_time(),),
-                          payload=(unicode(text),))
+                          payload=(unicode(text), sequence))
         self.dispersy.store_update_forward([message], True, True, True)
-
 

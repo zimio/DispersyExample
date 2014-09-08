@@ -30,19 +30,25 @@ class InterestPayload(Payload):
         def producer(self):
             return self._producer
 
-
-
 class DataPayload(Payload):
 
     class Implementation(Payload.Implementation):
 
-        def __init__(self, meta, text):
+        def __init__(self, meta, text, sequence_number):
             assert isinstance(text, unicode)
             assert len(text.encode("UTF-8")) <= 255
             super(DataPayload.Implementation, self).__init__(meta)
             self._text = text
+            self._sequence_number = sequence_number
 
         @property
         def text(self):
             return self._text
+
+        @property
+        def sequence_number(self):
+            return self._sequence_number
+
+
+
 

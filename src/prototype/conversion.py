@@ -9,6 +9,7 @@ class Conversion(BinaryConversion):
     def __init__(self, community):
         super(Conversion, self).__init__(community, "\x02")
         self.define_meta_message(chr(1), community.get_meta_message(u"data"), self._encode_text, self._decode_text)
+        self.define_meta_message(chr(2), community.get_meta_message(u"newdata"), self._encode_text, self._decode_text)
 
     def _encode_text(self, message):
         assert len(message.payload.text.encode("UTF-8")) < 256
@@ -29,3 +30,4 @@ class Conversion(BinaryConversion):
             raise DropPacket("Unable to decode UTF-8")
 
         return offset, placeholder.meta.payload.implement(text)
+
