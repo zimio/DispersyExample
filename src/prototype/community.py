@@ -1,4 +1,7 @@
 import logging
+import datetime
+import pickle
+import sys
 
 from .conversion import Conversion
 from .payload import SyncPayload, DataPayload, InterestPayload
@@ -9,7 +12,7 @@ from dispersy.authentication import MemberAuthentication
 from dispersy.community import Community
 from dispersy.conversion import DefaultConversion
 from dispersy.destination import CommunityDestination
-from dispersy.distribution import FullSyncDistribution
+from dispersy.distribution import FullSyncDistribution, LastSyncDistribution
 from dispersy.message import BatchConfiguration, Message, DelayMessageByProof
 from dispersy.resolution import PublicResolution
 
@@ -23,16 +26,34 @@ class ExampleCommunity(Community):
     #     # there is no dispersy-identity for the master member, so don't try to download (???)
     #     return False
 
-    def initialize(self, msg='hmmmMm'):
+    def initialize(self, file_name):
         "Called After init_community is called"
 
         super(ExampleCommunity, self).initialize()
         logging.info("ExampleCommunity Initalized")
-        self.digesttree = DigestTree(self.my_member.mid)
-        self.pit = PIT()
         #self.send_data(msg)
-        self.register_task("send_data",
-                           LoopingCall(self.send_data_console)).start(50 , now=True)
+        self.msg_number = 0
+        # Dictionary with the sequence of every message sent
+        self.messages_recv = {}
+        # Limit of messages sent and recieved
+        self.limit_msgs = 100
+        # Total delay of messages
+        self.delay = None
+
+        self.file_name = file_name
+        
+
+
+
+        self.start_task= self.register_task("check_time",
+                           LoopingCall(self.check_time))
+        self.start_task.start(1 , now=True)
+        self.task = self.register_task("send_data",
+                           LoopingCall(self.send_data_console))
+        self.finish_task = self.register_task("finish",
+                           LoopingCall(self.save_finish))
+        self.number_msg_recv = 0
+ 
 
 
 
@@ -41,89 +62,91 @@ class ExampleCommunity(Community):
         Create the packaging for your message payloads,
         in this case we have one message type that is distributed to all peers
         '''
-
         return super(ExampleCommunity, self).initiate_meta_messages() + [
-            Message(self, u"sync",
-                    MemberAuthentication(encoding="sha1"),
-                    PublicResolution(),
-                    FullSyncDistribution(enable_sequence_number=False, synchronization_direction=u"ASC", priority=128),
-                    CommunityDestination(node_count=10),
-                    SyncPayload(),
-                    self.check_sync,
-                    self.on_sync,
-                    batch=BatchConfiguration(max_window=3.0)),
-            Message(self, u"interest",
-                    MemberAuthentication(encoding="sha1"),
-                    PublicResolution(),
-                    FullSyncDistribution(enable_sequence_number=False, synchronization_direction=u"ASC", priority=128),
-                    CommunityDestination(node_count=10),
-                    InterestPayload(),
-                    self.check_interest,
-                    self.on_interest,
-                    batch=BatchConfiguration(max_window=3.0)),
             Message(self, u"data",
                     MemberAuthentication(encoding="sha1"),
                     PublicResolution(),
-                    FullSyncDistribution(enable_sequence_number=False, synchronization_direction=u"ASC", priority=128),
-                    CommunityDestination(node_count=10),
+                    LastSyncDistribution(synchronization_direction=u"DESC", priority=128, history_size=10),
+                    CommunityDestination(node_count=1),
                     DataPayload(),
                     self.check_data,
                     self.on_data,
-                    batch=BatchConfiguration(max_window=3.0)),
+                    batch=BatchConfiguration(max_window=1.0)),
 
         ]
 
+    def save_finish(self):
+        # saves the information in a file and finishes
+        output = open('../data/' + self.file_name, 'wb')
+        avgdelay = self.delay / self.number_msg_recv
+        missed_messages = 0
+        for msg_lst in self.messages_recv.values():
+            missed_messages = missed_messages + (self.limit_msgs - len(msg_lst))
+        pickle.dump((avgdelay, missed_messages), output)
+        output.close()
+        print 'file close'
+        self.finish_task.stop()
+
+    def check_time(self):
+        # starts task on a determined time
+        tminute = 33
+        if tminute == datetime.datetime.now().minute:
+            self.task.start(6 , now=True)
+            self.start_task.stop()
+
+
+
     def send_data_console(self):
-        msg = raw_input("You: ")
+        if self.msg_number >= self.limit_msgs:
+            self.task.stop()
+            self.finish_task.start(100 , now=False)
+            print 'end of task'
+            return
+        self.msg_number = self.msg_number + 1
+        msg = str(datetime.datetime.now()) + ';' + str(self.msg_number)
+        print 'sending message: ' + str(self.msg_number)
         self.send_data(msg)
 
     def initiate_conversions(self):
         return [DefaultConversion(self), Conversion(self)]
 
-    def check_sync(self, messages):
-        "Authentication of our Meta Message happens here, in this case every message is authorized"
-
-        for message in messages:
-            yield message
-
-    def on_sync(self, messages):
-        for message in messages:
-            self.pit.add(message)
-            # if it is the empty digest, send our empty digest
-            # NOTE: if not DirectDistribution, only send once
-            # if digest is equal, do nothing
-            # if digest is not equal, try to find it in the log
-            # if it is in digest log, send the statuses that changed since
-            # if it isn't, send known statuses and then send our sync
-
-
-    def check_interest(self, messages):
-        "Authentication of our Meta Message happens here, in this case every message is authorized"
-
-        for message in messages:
-            yield message
-
-    def on_interest(self, messages):
-        "Called after check_text, we can now display our message to the user"
-
-        for message in messages:
-            print 'someone says', message.payload.text
-            logging.info("someone says '%s'", message.payload.text)
 
     def check_data(self, messages):
         "Authentication of our Meta Message happens here, in this case every message is authorized"
 
         for message in messages:
+            time, number = message.payload.text.split(';')
+            mid = message.authentication.member.mid
+            if mid in self.messages_recv.keys() and number in self.messages_recv[mid]:
+                print 'found duplicate'
+                continue
             yield message
+
+    def add_delay(self, ftime):
+        if self.delay == None:
+            self.delay = datetime.datetime.now() - ftime
+        else:
+            self.delay = self.delay + datetime.datetime.now() - ftime
+
+    def add_number(self, number, mid):
+        if not (mid in self.messages_recv.keys()):
+            self.messages_recv[mid] = []
+        self.messages_recv[mid].append(number)
 
     def on_data(self, messages):
         "Called after check_text, we can now display our message to the user"
+        dateformat = '%Y-%m-%d %H:%M:%S.%f'
 
         for message in messages:
             if message.authentication.member.mid == self.my_member.mid:
                 # if we sent the message, ignore
                 continue
-            print 'Stranger: ', message.payload.text
+            time, number = message.payload.text.split(';')
+            ftime = datetime.datetime.strptime(time, dateformat)
+            self.add_delay(ftime)
+            self.add_number(int(number), message.authentication.member.mid)
+            self.number_msg_recv = self.number_msg_recv + 1
+            print 'recieved: ' + number + ' delay:' + str((datetime.datetime.now() - ftime).total_seconds())
 
     def send_data(self, text='testing'):
         meta = self.get_meta_message(u"data")
