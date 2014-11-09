@@ -1,7 +1,7 @@
 import logging
 
 from .conversion import Conversion
-from .payload import SyncPayload, DataPayload, InterestPayload
+from .payload import MessagePayload
 from .digesttree import DigestTree
 from .pit import PIT
 
@@ -9,7 +9,7 @@ from dispersy.authentication import MemberAuthentication
 from dispersy.community import Community
 from dispersy.conversion import DefaultConversion
 from dispersy.destination import CommunityDestination
-from dispersy.distribution import FullSyncDistribution
+from dispersy.distribution import FullSyncDistribution, LastSyncDistribution, DirectDistribution
 from dispersy.message import BatchConfiguration, Message, DelayMessageByProof
 from dispersy.resolution import PublicResolution
 
@@ -30,9 +30,10 @@ class ExampleCommunity(Community):
         logging.info("ExampleCommunity Initalized")
         self.digesttree = DigestTree(self.my_member.mid)
         self.pit = PIT()
-        #self.send_data(msg)
-        self.register_task("send_data",
-                           LoopingCall(self.send_data_console)).start(50 , now=True)
+        #self.send_message(msg)
+
+        self.register_task("send_message",
+                           LoopingCall(self.send_message_console)).start(50 , now=True)
 
 
 
@@ -43,80 +44,41 @@ class ExampleCommunity(Community):
         '''
 
         return super(ExampleCommunity, self).initiate_meta_messages() + [
-            Message(self, u"sync",
+            Message(self, u"message",
                     MemberAuthentication(encoding="sha1"),
                     PublicResolution(),
-                    FullSyncDistribution(enable_sequence_number=False, synchronization_direction=u"ASC", priority=128),
+                    LastSyncDistribution(synchronization_direction=u"DESC", priority=128, history_size=10),
                     CommunityDestination(node_count=10),
-                    SyncPayload(),
-                    self.check_sync,
-                    self.on_sync,
+                    MessagePayload(),
+                    self.check_message,
+                    self.on_message,
                     batch=BatchConfiguration(max_window=3.0)),
-            Message(self, u"interest",
+            Message(self, u"message-user",
                     MemberAuthentication(encoding="sha1"),
                     PublicResolution(),
-                    FullSyncDistribution(enable_sequence_number=False, synchronization_direction=u"ASC", priority=128),
+                    DirectDistribution(),
                     CommunityDestination(node_count=10),
-                    InterestPayload(),
-                    self.check_interest,
-                    self.on_interest,
-                    batch=BatchConfiguration(max_window=3.0)),
-            Message(self, u"data",
-                    MemberAuthentication(encoding="sha1"),
-                    PublicResolution(),
-                    FullSyncDistribution(enable_sequence_number=False, synchronization_direction=u"ASC", priority=128),
-                    CommunityDestination(node_count=10),
-                    DataPayload(),
-                    self.check_data,
-                    self.on_data,
+                    MessagePayload(),
+                    self.check_message,
+                    self.on_message_user,
                     batch=BatchConfiguration(max_window=3.0)),
 
         ]
 
-    def send_data_console(self):
+    def send_message_console(self):
         msg = raw_input("You: ")
-        self.send_data(msg)
+        self.send_message(msg)
 
     def initiate_conversions(self):
         return [DefaultConversion(self), Conversion(self)]
 
-    def check_sync(self, messages):
+    def check_message(self, messages):
         "Authentication of our Meta Message happens here, in this case every message is authorized"
 
         for message in messages:
             yield message
 
-    def on_sync(self, messages):
-        for message in messages:
-            self.pit.add(message)
-            # if it is the empty digest, send our empty digest
-            # NOTE: if not DirectDistribution, only send once
-            # if digest is equal, do nothing
-            # if digest is not equal, try to find it in the log
-            # if it is in digest log, send the statuses that changed since
-            # if it isn't, send known statuses and then send our sync
-
-
-    def check_interest(self, messages):
-        "Authentication of our Meta Message happens here, in this case every message is authorized"
-
-        for message in messages:
-            yield message
-
-    def on_interest(self, messages):
-        "Called after check_text, we can now display our message to the user"
-
-        for message in messages:
-            print 'someone says', message.payload.text
-            logging.info("someone says '%s'", message.payload.text)
-
-    def check_data(self, messages):
-        "Authentication of our Meta Message happens here, in this case every message is authorized"
-
-        for message in messages:
-            yield message
-
-    def on_data(self, messages):
+    def on_message(self, messages):
         "Called after check_text, we can now display our message to the user"
 
         for message in messages:
@@ -125,11 +87,27 @@ class ExampleCommunity(Community):
                 continue
             print 'Stranger: ', message.payload.text
 
-    def send_data(self, text='testing'):
-        meta = self.get_meta_message(u"data")
+    def send_message(self, text='testing'):
+        meta = self.get_meta_message(u"message")
         message = meta.impl(authentication=(self.my_member,),
                           distribution=(self.claim_global_time(),),
                           payload=(unicode(text),))
         self.dispersy.store_update_forward([message], True, True, True)
+
+    def on_message_user(self, messages):
+        "Called after check_text, we can now display our message to the user"
+
+        for message in messages:
+            if message.authentication.member.mid == self.my_member.mid:
+                # if we sent the message, ignore
+                continue
+            print 'Stranger: ', message.payload.text
+
+    def send_message_user(self, message, candidate):
+        meta = self.get_meta_message(u"message-user")
+        message = meta.impl(authentication=(self.my_member,),
+                          distribution=(self.claim_global_time(),),
+                          payload=(unicode(message),))
+        self.dispersy._send([candidate], [message])
 
 

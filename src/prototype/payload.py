@@ -32,14 +32,14 @@ class InterestPayload(Payload):
 
 
 
-class DataPayload(Payload):
+class MessagePayload(Payload):
 
     class Implementation(Payload.Implementation):
 
         def __init__(self, meta, text):
             assert isinstance(text, unicode)
             assert len(text.encode("UTF-8")) <= 255
-            super(DataPayload.Implementation, self).__init__(meta)
+            super(MessagePayload.Implementation, self).__init__(meta)
             self._text = text
 
         @property
