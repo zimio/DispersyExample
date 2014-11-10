@@ -1,7 +1,7 @@
 import logging
 
 from .conversion import Conversion, StatusConversion, EmptyConversion
-from .payload import MessagePayload, StatusPayload, EmptyPayload
+from .payload import MessagePayload, StatusPayload, EmptyPayload, NickPayload
 from .digesttree import DigestTree
 from .pit import PIT
 
@@ -89,6 +89,34 @@ class ExampleCommunity(Community):
                     self.check_empty,
                     self.on_get_status,
                     batch=BatchConfiguration(max_window=3.0)),
+            Message(self, u"nick",
+                    MemberAuthentication(encoding="sha1"),
+                    PublicResolution(),
+                    LastSyncDistribution(synchronization_direction=u"DESC", priority=128, history_size=10),
+                    CommunityDestination(node_count=10),
+                    NickPayload(),
+                    self.check_nick,
+                    self.on_nick,
+                    batch=BatchConfiguration(max_window=3.0)),
+            Message(self, u"set-nick",
+                    MemberAuthentication(encoding="sha1"),
+                    PublicResolution(),
+                    DirectDistribution(),
+                    CommunityDestination(node_count=10),
+                    NickPayload(),
+                    self.check_nick,
+                    self.on_nick,
+                    batch=BatchConfiguration(max_window=3.0)),
+            Message(self, u"get-nick",
+                    MemberAuthentication(encoding="sha1"),
+                    PublicResolution(),
+                    DirectDistribution(),
+                    CommunityDestination(node_count=10),
+                    EmptyPayload(),
+                    self.check_empty,
+                    self.on_get_nick,
+                    batch=BatchConfiguration(max_window=3.0)),
+
 
 
         ]
@@ -115,7 +143,6 @@ class ExampleCommunity(Community):
                 # if we sent the message, ignore
                 continue
             print 'Stranger: ', message.payload.text
-            self.send_get_status(message.candidate)
 
     def send_message(self, text='testing'):
         meta = self.get_meta_message(u"message")
@@ -183,4 +210,28 @@ class ExampleCommunity(Community):
                           distribution=(self.claim_global_time(),),
                           payload=('0',))
         self.dispersy._send([candidate], [message])
+
+    def check_nick(self, messages):
+        # nicks have a limit of 12 characters
+        # nicks are not allowed to have weird special characters
+        # maybe make then utf-8
+
+        for message in messages:
+            yield message
+
+    def on_nick(self, messages):
+        "Called after check_text, we can now display our message to the user"
+
+        for message in messages:
+            if message.authentication.member.mid == self.my_member.mid:
+                # if we sent the message, ignore
+                continue
+            print 'nick recieved: ' + message.payload.nick
+
+    def send_nick(self, nick):
+        meta = self.get_meta_message(u"nick")
+        message = meta.impl(authentication=(self.my_member,),
+                          distribution=(self.claim_global_time(),),
+                          payload=(unicode(nick),))
+        self.dispersy.store_update_forward([message], True, True, True)
 

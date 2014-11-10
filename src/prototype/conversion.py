@@ -10,6 +10,8 @@ class Conversion(BinaryConversion):
         super(Conversion, self).__init__(community, "\x02")
         self.define_meta_message(chr(1), community.get_meta_message(u"message"), self._encode_text, self._decode_text)
         self.define_meta_message(chr(2), community.get_meta_message(u"message-user"), self._encode_text, self._decode_text)
+        self.define_meta_message(chr(3), community.get_meta_message(u"nick"), self._encode_text, self._decode_text)
+        self.define_meta_message(chr(4), community.get_meta_message(u"set-nick"), self._encode_text, self._decode_text)
 
     def _encode_text(self, message):
         assert len(message.payload.text.encode("UTF-8")) < 256
@@ -36,8 +38,8 @@ class StatusConversion(BinaryConversion):
 
     def __init__(self, community):
         super(StatusConversion, self).__init__(community, "\x02")
-        self.define_meta_message(chr(3), community.get_meta_message(u"status"), self._encode_status, self._decode_status)
-        self.define_meta_message(chr(4), community.get_meta_message(u"set-status"), self._encode_status, self._decode_status)
+        self.define_meta_message(chr(5), community.get_meta_message(u"status"), self._encode_status, self._decode_status)
+        self.define_meta_message(chr(6), community.get_meta_message(u"set-status"), self._encode_status, self._decode_status)
 
     def _encode_status(self, message):
         assert (message.payload.status < 5)
@@ -56,7 +58,8 @@ class EmptyConversion(BinaryConversion):
 
     def __init__(self, community):
         super(EmptyConversion, self).__init__(community, "\x02")
-        self.define_meta_message(chr(5), community.get_meta_message(u"get-status"), self._encode_empty, self._decode_empty)
+        self.define_meta_message(chr(7), community.get_meta_message(u"get-status"), self._encode_empty, self._decode_empty)
+        self.define_meta_message(chr(8), community.get_meta_message(u"get-nick"), self._encode_empty, self._decode_empty)
 
     def _encode_empty(self, message):
         return ('0',)

@@ -20,6 +20,25 @@ class EmptyPayload(Payload):
         def __init__(self, meta, foo):
             super(EmptyPayload.Implementation, self).__init__(meta)
 
+class NickPayload(Payload):
+
+    class Implementation(Payload.Implementation):
+
+        def __init__(self, meta, nick):
+            super(NickPayload.Implementation, self).__init__(meta)
+            self._nick = nick[:12]
+
+        @property
+        def nick(self):
+            return self._nick
+
+        @property
+        def text(self):
+            # We do this to allow us to reuse the conversion class for
+            # messages here.
+            return self._nick
+
+
 class MessagePayload(Payload):
 
     class Implementation(Payload.Implementation):
