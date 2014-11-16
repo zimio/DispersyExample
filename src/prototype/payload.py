@@ -53,3 +53,24 @@ class MessagePayload(Payload):
         def text(self):
             return self._text
 
+class SearchPayload(Payload):
+
+    class Implementation(Payload.Implementation):
+
+        def __init__(self, meta, keywords, file_type):
+            assert isinstance(keywords, unicode)
+            assert isinstance(file_type, unicode)
+            assert len(keywords) < 100
+            assert len(file_type) < 10
+            super(SearchPayload.Implementation, self).__init__(meta)
+            self._keywords = keywords
+            self._file_type = file_type
+
+        @property
+        def keywords(self):
+            return self._keywords
+
+        @property
+        def file_type(self):
+            return self._file_type
+

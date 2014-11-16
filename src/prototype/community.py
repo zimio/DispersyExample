@@ -1,7 +1,7 @@
 import logging
 
-from .conversion import Conversion, StatusConversion, EmptyConversion
-from .payload import MessagePayload, StatusPayload, EmptyPayload, NickPayload
+from .conversion import Conversion, StatusConversion, EmptyConversion, SearchConversion
+from .payload import MessagePayload, StatusPayload, EmptyPayload, NickPayload, SearchPayload
 from .digesttree import DigestTree
 from .pit import PIT
 
@@ -116,6 +116,33 @@ class ExampleCommunity(Community):
                     self.check_empty,
                     self.on_get_nick,
                     batch=BatchConfiguration(max_window=3.0)),
+            Message(self, u"keepalive",
+                    MemberAuthentication(encoding="sha1"),
+                    PublicResolution(),
+                    LastSyncDistribution(synchronization_direction=u"DESC", priority=128, history_size=10),
+                    CommunityDestination(node_count=10),
+                    EmptyPayload(),
+                    self.check_empty,
+                    self.on_keepalive,
+                    batch=BatchConfiguration(max_window=3.0)),
+            Message(self, u"search",
+                    MemberAuthentication(encoding="sha1"),
+                    PublicResolution(),
+                    LastSyncDistribution(synchronization_direction=u"DESC", priority=128, history_size=10),
+                    CommunityDestination(node_count=10),
+                    SearchPayload(),
+                    self.check_search,
+                    self.on_search,
+                    batch=BatchConfiguration(max_window=3.0)),
+            Message(self, u"search-user",
+                    MemberAuthentication(encoding="sha1"),
+                    PublicResolution(),
+                    DirectDistribution(),
+                    CommunityDestination(node_count=10),
+                    SearchPayload(),
+                    self.check_search,
+                    self.on_search,
+                    batch=BatchConfiguration(max_window=3.0)),
 
 
 
@@ -127,7 +154,7 @@ class ExampleCommunity(Community):
 
     def initiate_conversions(self):
         return [DefaultConversion(self), Conversion(self), StatusConversion(self), 
-                EmptyConversion(self)]
+                EmptyConversion(self), SearchConversion(self)]
 
     def check_message(self, messages):
         "Authentication of our Meta Message happens here, in this case every message is authorized"
@@ -233,5 +260,43 @@ class ExampleCommunity(Community):
         message = meta.impl(authentication=(self.my_member,),
                           distribution=(self.claim_global_time(),),
                           payload=(unicode(nick),))
+        self.dispersy.store_update_forward([message], True, True, True)
+
+    def on_keepalive(self, messages):
+
+        for message in messages:
+            if message.authentication.member.mid == self.my_member.mid:
+                # if we sent the message, ignore
+                continue
+            print 'nick recieved: ' + message.payload.nick
+
+    def check_search(self, messages):
+
+        for message in messages:
+            yield message
+
+    def on_get_nick(self, messages):
+        for message in messages:
+            if message.authentication.member.mid == self.my_member.mid:
+                # if we sent the message, ignore
+                continue
+            print 'get nick recieved: '
+
+
+    def on_search(self, messages):
+        "Called after check_text, we can now display our message to the user"
+
+        for message in messages:
+            if message.authentication.member.mid == self.my_member.mid:
+                # if we sent the message, ignore
+                continue
+            print 'search recieved: ' + message.payload.keywords
+            print 'search recieved: ' + message.payload.file_type
+
+    def send_search(self, keywords, file_type):
+        meta = self.get_meta_message(u"search")
+        message = meta.impl(authentication=(self.my_member,),
+                          distribution=(self.claim_global_time(),),
+                          payload=(unicode(keywords), unicode(file_type)))
         self.dispersy.store_update_forward([message], True, True, True)
 
