@@ -97,3 +97,35 @@ class SearchConversion(BinaryConversion):
 
         return offset, placeholder.meta.payload.implement(payload[0], payload[1])
 
+class ResultsConversion(BinaryConversion):
+
+    def __init__(self, community):
+        super(SearchConversion, self).__init__(community, "\x02")
+        self.define_meta_message(chr(12), community.get_meta_message(u"results"), self._encode_results, self._decode_results)
+
+    def _encode_results(self, message):
+        max_len = self._community.dispersy_sync_bloom_filter_bits / 8
+
+        def create_msg():
+            return encode(message.payload.torrents)
+
+        packet = create_msg()
+        while len(packet) > max_len:
+            torrent_hash = choice(message.payload.torrents.keys())
+            # TODO: Put removed torrents in list pending to be sent.
+            del message.payload.torrents[torrent_hash]
+            packet = create_msg()
+        return packet,
+
+
+    def _decode_results(self, placeholder, offset, message):
+        try:
+            offset, payload = decode(message, offset)
+        except ValueError:
+            raise DropPacket("Unable to decode the Results-muc payload")
+
+        if not isinstance(payload, dict):
+            raise DropPacket("Invalid payload type")
+
+        return offset, placeholder.meta.payload.implement(payload)
+

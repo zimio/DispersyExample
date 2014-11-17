@@ -74,3 +74,15 @@ class SearchPayload(Payload):
         def file_type(self):
             return self._file_type
 
+class ResultsPayload(Payload):
+
+    class Implementation(Payload.Implementation):
+
+        def __init__(self, meta, torrents):
+            super(ResultsPayload.Implementation, self).__init__(meta)
+            self._torrents = torrents
+
+        @property
+        def torrents(self):
+            return self._torrents
+

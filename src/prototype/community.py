@@ -1,7 +1,7 @@
 import logging
 
 from .conversion import Conversion, StatusConversion, EmptyConversion, SearchConversion
-from .payload import MessagePayload, StatusPayload, EmptyPayload, NickPayload, SearchPayload
+from .payload import MessagePayload, StatusPayload, EmptyPayload, NickPayload, SearchPayload, ResultsPayload
 from .digesttree import DigestTree
 from .pit import PIT
 
@@ -142,6 +142,15 @@ class ExampleCommunity(Community):
                     SearchPayload(),
                     self.check_search,
                     self.on_search,
+                    batch=BatchConfiguration(max_window=3.0)),
+            Message(self, u"results",
+                    MemberAuthentication(encoding="sha1"),
+                    PublicResolution(),
+                    DirectDistribution(),
+                    CommunityDestination(node_count=10),
+                    ResultsPayload(),
+                    self.check_resutls,
+                    self.on_results,
                     batch=BatchConfiguration(max_window=3.0)),
 
 
@@ -299,4 +308,16 @@ class ExampleCommunity(Community):
                           distribution=(self.claim_global_time(),),
                           payload=(unicode(keywords), unicode(file_type)))
         self.dispersy.store_update_forward([message], True, True, True)
+
+    def check_results(self, messages):
+
+        for message in messages:
+            yield message
+
+    def on_results(self, messages):
+        for message in messages:
+            if message.authentication.member.mid == self.my_member.mid:
+                # if we sent the message, ignore
+                continue
+            print 'results received '
 
